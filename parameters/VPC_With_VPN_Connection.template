@@ -1,0 +1,6 @@
+{
+	"VPCCIDR" : "10.1.0.0/16",
+	"SubnetCIDR" : "10.1.0.0/24",
+	"VPNAddress" : "",
+	"OnPremiseCIDR" : "10.0.0.0/16"
+}

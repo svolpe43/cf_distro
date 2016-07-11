@@ -1,0 +1,6 @@
+{
+	"HaskKeyElementName" : "",
+	"HaskKeyElementType" : "S",
+	"ReadCapacityUnits" : "5",
+	"WriteCapacityUnits" : "10"
+}

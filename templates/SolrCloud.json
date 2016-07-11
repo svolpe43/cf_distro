@@ -1,0 +1,263 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "HostedZone": {
+            "Type": "String",
+            "Default": ""
+        },
+        "ZKConfigS3BucketPath": {
+            "Type": "String",
+            "Default": ""
+        },
+        "DomainName": {
+            "Type": "String",
+            "Default": ""
+        }
+    },
+    "Resources": {
+        "RoleZK": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName" : "S3Access",
+                        "PolicyDocument" : {
+                            "Version" : "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "Stmt1386687089728",
+                                    "Action": [
+                                        "s3:AbortMultipartUpload",
+                                        "s3:DeleteObject",
+                                        "s3:GetBucketAcl",
+                                        "s3:GetBucketPolicy",
+                                        "s3:GetObject",
+                                        "s3:GetObjectAcl",
+                                        "s3:ListBucket",
+                                        "s3:ListBucketMultipartUploads",
+                                        "s3:ListMultipartUploadParts",
+                                        "s3:PutObject",
+                                        "s3:PutObjectAcl"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        { "Fn::Join" : ["", [
+                                            "arn:aws:s3:::",
+                                            { "Ref" : "ZKConfigS3BucketPath" }
+                                        ]]}
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName" : "53Access",
+                        "PolicyDocument" : {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect":"Allow",
+                                    "Action":["route53:ChangeResourceRecordSets"],
+                                    "Resource": { "Fn::Join" : ["", [
+                                        "arn:aws:route53:::hostedzone/",
+                                        { "Ref" : "HostedZone" }
+                                    ]]}
+                                },
+                                {
+                                    "Effect":"Allow",
+                                    "Action":["route53:GetChange"],
+                                    "Resource":"arn:aws:route53:::change/*"
+                                }
+                           ]
+                        }
+                    },
+                    {
+                        "PolicyName" : "EC2Access",
+                        "PolicyDocument" : {
+                            "Version" : "2012-10-17",
+                            "Statement" : [
+                                {
+                                    "Effect" : "Allow",
+                                    "Action" : [ "ec2:*" ],
+                                    "Resource" : "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "InstanceProfileZK": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "DependsOn": "RoleZK",
+            "Properties": {
+                "Path": "/",
+                "Roles": [{"Ref": "RoleZK"}]
+            }
+        },
+        "LCZK" : {
+            "Type" : "AWS::AutoScaling::LaunchConfiguration",
+            "Properties" : {
+                "ImageId": "ami-fce3c696",
+                "KeyName": "search-rage",
+                "InstanceType" : "t2.micro",
+                "IamInstanceProfile": {"Ref": "InstanceProfileZK"},
+                "UserData" : {
+                    "Fn::Base64" : { "Fn::Join" : ["", [
+                        "#!/bin/bash -v",
+
+                        "\nsudo apt-get upgrade && sudo apt-get update",
+                        "\nsudo apt-get install awscli -y",
+                        "\nsudo apt-get install jq -y",
+
+                        "\ntouch /tmp/record_set.json",
+
+                        "\nip=`ec2metadata --public-ip`",
+                        "\nrecord=$(aws ec2 describe-instances --instance-ids $(ec2metadata --instance-id) --region us-east-1 | jq '.Reservations[0].Instances[0].Tags[] | select(.Key == \"aws:cloudformation:logical-id\").Value'  | sed 's/\"//g')",
+
+                        "\necho '{\"Comment\": \"ZK Record\", \"Changes\": [{' >> /tmp/record_set.json",
+                        "\necho '\"Action\": \"CREATE\",' >> /tmp/record_set.json",
+                        "\necho '\"ResourceRecordSet\": {' >> /tmp/record_set.json",
+                        "\necho -n '\"Name\": \"' >> /tmp/record_set.json",
+                        "\necho -n \"$record\" >> /tmp/record_set.json",
+                        "\necho '.sr-dev.acquia.com\",' >> /tmp/record_set.json",
+                        "\necho '\"Type\": \"A\",' >> /tmp/record_set.json",
+                        "\necho '\"TTL\": 900,' >> /tmp/record_set.json",
+                        "\necho '\"ResourceRecords\": [{' >> /tmp/record_set.json",
+                        "\necho -n '\"Value\": \"' >> /tmp/record_set.json",
+                        "\necho -n \"$ip\" >> /tmp/record_set.json",
+                        "\necho '\"}]}}]}' >> /tmp/record_set.json",
+
+                        "\naws route53 change-resource-record-sets --hosted-zone-id ", { "Ref" : "HostedZone" }, " --change-batch file:///tmp/record_set.json",
+
+                        "\nsudo apt-get install software-properties-common",
+                        "\nsudo add-apt-repository ppa:webupd8team/java",
+                        "\nsudo apt-get update",
+                        "\necho debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections",
+                        "\necho debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections",
+                        "\nsudo apt-get install -y oracle-java8-installer",
+
+                        "\nwget https://www.apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz",
+                        "\nsudo tar -xvzf zookeeper-3.4.6.tar.gz -C /usr/share",
+                        "\nsudo ln -s /usr/share/zookeeper-3.4.6/ /usr/share/zookeeper",
+                        "\ncd /var/lib/ && mkdir -p zookeeper",
+
+                        "\nsudo apt-get install git -y",
+                        "\ncd /usr/share",
+                        "\nsudo git clone https://github.com/Netflix/exhibitor",
+                        "\nsudo mkdir /usr/share/exhibitor-build && cd /usr/share/exhibitor-build",
+                        "\nsudo wget https://raw.githubusercontent.com/Netflix/exhibitor/master/exhibitor-standalone/src/main/resources/buildscripts/standalone/gradle/build.gradle",
+                        "\nsudo ../exhibitor/gradlew shadowJar",
+
+                        "\nmkdir -p /var/log/zookeeper",
+
+                        "\nparams=\"-c s3\"",
+                        "\nparams=\"$params --hostname $(ec2metadata --public-ip)\"",
+                        "\nparams=\"$params --s3config ", { "Ref" : "ZKConfigS3BucketPath" }, "\"",
+                        "\nsudo java -jar build/libs/exhibitor-1.5.6-all.jar $params"
+                    ]]}
+                }
+            }
+        },
+        "zooone" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "AvailabilityZones" : ["us-east-1b"],
+                "DesiredCapacity" : 1,
+                "LaunchConfigurationName" : { "Ref" : "LCZK" },
+                "MaxSize" : 10,
+                "MinSize" : 1
+            }
+        },
+        "zootwo" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "AvailabilityZones" : ["us-east-1b"],
+                "DesiredCapacity" : 1,
+                "LaunchConfigurationName" : { "Ref" : "LCZK" },
+                "MaxSize" : 10,
+                "MinSize" : 1
+            }
+        },
+        "zoothree" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "AvailabilityZones" : ["us-east-1b"],
+                "DesiredCapacity" : 1,
+                "LaunchConfigurationName" : { "Ref" : "LCZK" },
+                "MaxSize" : 10,
+                "MinSize" : 1
+            }
+        },
+        "SolrOne" : {
+           "Type" : "AWS::EC2::Instance",
+           "DependsOn": ["zooone", "zootwo", "zoothree"],
+           "Properties" : {
+                "AvailabilityZone" : "us-east-1b",
+                "ImageId" : "ami-9a8981f0",
+                "KeyName": "search-rage",
+                "InstanceType" : "t2.micro",
+                 "UserData" : {
+                    "Fn::Base64" : { "Fn::Join" : ["\n", [
+                        "#!/bin/bash -v",
+
+                        "cd /opt/solr",
+                        "sudo bin/solr stop -p 8983",
+                        "sudo bin/solr start -cloud -s /usr/share/solr/data/ -p 80 -z zooone.", { "Ref" : "DomainName" }, ":2181,zootwo.", { "Ref" : "DomainName" }, ":2181,zoothree.", { "Ref" : "DomainName" }, ":2181",
+                        "sudo bin/solr create -c demo_collection -s 3 -rf 3"
+                    ]]}
+                }
+           }
+        },
+        "SolrTwo" : {
+           "Type" : "AWS::EC2::Instance",
+           "DependsOn": ["zooone", "zootwo", "zoothree"],
+           "Properties" : {
+                "AvailabilityZone" : "us-east-1b",
+                "ImageId" : "ami-9a8981f0",
+                "KeyName": "search-rage",
+                "InstanceType" : "t2.micro",
+                "UserData" : {
+                    "Fn::Base64" : { "Fn::Join" : ["\n", [
+                        "#!/bin/bash -v",
+
+                        "cd /opt/solr",
+                        "sudo bin/solr stop -p 8983",
+                        "sudo bin/solr start -cloud -s /usr/share/solr/data/ -p 80 -z zooone.", { "Ref" : "DomainName" }, ":2181,zootwo.", { "Ref" : "DomainName" }, ":2181,zoothree.", { "Ref" : "DomainName" }, ":2181",
+                    ]]}
+                }
+           }
+        },
+        "SolrThree" : {
+           "Type" : "AWS::EC2::Instance",
+           "DependsOn": ["zooone", "zootwo", "zoothree"],
+           "Properties" : {
+                "AvailabilityZone" : "us-east-1b",
+                "ImageId" : "ami-9a8981f0",
+                "KeyName": "search-rage",
+                "InstanceType" : "t2.micro",
+                 "UserData" : {
+                    "Fn::Base64" : { "Fn::Join" : ["\n", [
+                        "#!/bin/bash -v",
+
+                        "cd /opt/solr",
+                        "sudo bin/solr stop -p 8983",
+                        "sudo bin/solr start -cloud -s /usr/share/solr/data/ -p 80 -z zooone.", { "Ref" : "DomainName" }, ":2181,zootwo.", { "Ref" : "DomainName" }, ":2181,zoothree.", { "Ref" : "DomainName" }, ":2181",
+                    ]]}
+                }
+           }
+        }
+    }
+}

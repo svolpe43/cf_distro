@@ -1,0 +1,9 @@
+{
+	"DatabaseName" : "defaultdb",
+	"ClusterType" : "single-node",
+	"NumberOfNodes" : "1",
+	"NodeType" : "dc1.large",
+	"MasterUsername" : "",
+	"MasterUserPassword" : "",
+	"DatabasePort" : "5439"
+}

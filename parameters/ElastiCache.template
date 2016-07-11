@@ -1,0 +1,7 @@
+{
+	"KeyName" : "",
+	"InstanceType" : "t2.small",
+	"CacheNodeType" : "cache.t2.small",
+	"NumberOfCacheNodes" : "1",
+	"SSHLocation" : "0.0.0.0/0"
+}

@@ -1,0 +1,6 @@
+{
+	"KeyName" : "",
+	"SSHLocation" : "0.0.0.0/0",
+	"WebServerInstanceType" : "t2.small",
+	"WebServerCount" : "1"
+}

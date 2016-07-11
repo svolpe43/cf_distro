@@ -1,0 +1,5 @@
+{
+	"KeyName" : "",
+	"SSHLocation" : "0.0.0.0/0",
+	"EC2InstanceType" : "t2.small"
+}

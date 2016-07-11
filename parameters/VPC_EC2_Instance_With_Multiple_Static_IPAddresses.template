@@ -1,0 +1,9 @@
+{
+	"KeyName" : "",
+	"InstanceType" : "t2.small",
+	"VpcId" : "",
+	"SubnetId" : "",
+	"PrimaryIPAddress" : "",
+	"SecondaryIPAddress" : "",
+	"SSHLocation" : "0.0.0.0/0"
+}

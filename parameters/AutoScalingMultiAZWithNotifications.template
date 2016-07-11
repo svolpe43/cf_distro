@@ -1,0 +1,6 @@
+{
+	"InstanceType" : "t2.small",
+	"OperatorEMail" : "",
+	"KeyName" : "",
+	"SSHLocation" : "0.0.0.0/0"
+}

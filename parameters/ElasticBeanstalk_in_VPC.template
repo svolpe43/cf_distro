@@ -1,0 +1,7 @@
+{
+	"BastionKeyName" : "",
+	"KeyName" : "",
+	"SSHLocation" : "0.0.0.0/0",
+	"BastionInstanceType" : "t2.small",
+	"NATInstanceType" : "t2.small"
+}

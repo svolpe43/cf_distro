@@ -1,0 +1,9 @@
+{
+	"DBName" : "MyDatabase",
+	"DBUser" : "",
+	"DBPassword" : "",
+	"DBAllocatedStorage" : "5",
+	"DBInstanceClass" : "db.t2.small",
+	"EC2SecurityGroup" : "default",
+	"MultiAZ" : "false"
+}
